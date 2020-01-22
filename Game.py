@@ -11,6 +11,7 @@ pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 GRAVITY = 2
+FONT = pygame.font.Font(None, 24)
 
 def terminate():
     pygame.quit()
@@ -63,34 +64,62 @@ tiles_resourse = {
         "quantity": 1,
         "strength": 1.2,
         "rarity": 100,
-        "price": 50
+        "price": 30
     },
     '3': {
         "type": "silver",
         "quantity": 1,
         "strength": 1.5,
-        "rarity": 50,
-        "price": 200
+        "rarity": 30,
+        "price": 150
     },
     '4': {
         "type": "gold",
         "quantity": 1,
         "strength": 1.7,
-        "rarity": 10,
-        "price": 400
+        "rarity": 8,
+        "price": 300
     },
     '5': {
         "type": "gem",
         "quantity": 1,
         "strength": 1.5,
         "rarity": 1,
-        "price": 700
+        "price": 600
     },
 }
 
 for resourse in tiles_resourse.values():
     resourse["image"] = load_image(f"{resourse['type']}.png", -1)
 
+class Interface:
+    def __init__(self, screen, coins=0, oxygen=100):
+        self.screen = screen
+        self.oxygen = oxygen
+        self.coins = coins
+        self.coins_image = load_image("coins.png", -1)
+    
+    def set_coins(self, coins):
+        self.coins = coins
+    
+    def set_oxygen(self, oxygen):
+        self.oxygen = oxygen
+    
+    def draw(self):
+        oxygen_sur = pygame.Surface((WIDTH * self.oxygen, 15))
+        if self.oxygen > 0.30:
+            oxygen_sur.fill(pygame.Color("blue"))
+        else:
+            oxygen_sur.fill(pygame.Color("red"))
+        self.screen.blit(oxygen_sur, (0, 0))
+
+        coins_sur = pygame.Surface((WIDTH, 20), pygame.SRCALPHA, 32)
+        coins_sur.blit(self.coins_image, (3, 0))
+        txt = FONT.render(str(self.coins), 0, (255, 255, 255))
+        coins_sur.blit(txt, (26, 0))
+        self.screen.blit(coins_sur, (0, 20))
+
+        
 class Tile(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, basis, resourse):
         super().__init__(tiles_group, all_sprites)
@@ -144,7 +173,10 @@ class Player(pygame.sprite.Sprite):
         self.velocity = 2
         self.diging_velocity = 2
         self.gravity = GRAVITY
-        self.oxygen = 10000
+        self.oxygen = 4000
+        self.max_oxygen = 4000
+
+        self.coins = 0
     
     def _collide_borders(self):
         colliding = pygame.sprite.spritecollide(self, border_group, False)
@@ -214,6 +246,7 @@ class Player(pygame.sprite.Sprite):
         for background in background_group:
             if background.rect.top -self.rect.top >= 15:
                 self.rect.top += self.velocity
+                self.oxygen = self.max_oxygen
         
         for coll, side in self._collide_borders():
             if side == "bottom":
@@ -236,6 +269,7 @@ class Player(pygame.sprite.Sprite):
         if self.diging >= 100:
             self.diging = 0
             self.diging_side = None
+            self.coins += self.diging_tile.price
             self.diging_tile.kill()
             return
 
@@ -351,7 +385,7 @@ Background(level_blocks_width * tile_width, level_blocks_height * tile_height)
 border_group = pygame.sprite.Group()
 for side in ("right", "left", "bottom"):
     Border(level_blocks_width * tile_width, level_blocks_height * tile_height, side)
-
+interface = Interface(screen)
 camera = Camera()
 running = True
 
@@ -362,7 +396,8 @@ while running:
 
     keys = pygame.key.get_pressed()
     player.action(keys)
-    
+    interface.set_oxygen(player.oxygen / player.max_oxygen)
+    interface.set_coins(player.coins)
     camera.update(player)
     for sprite in all_sprites:
         camera.apply(sprite)
@@ -377,6 +412,7 @@ while running:
     tiles_group.draw(screen)
     player_group.draw(screen)
     border_group.draw(screen)
+    interface.draw()
     
     pygame.display.flip()
     clock.tick(FPS)
