@@ -51,6 +51,7 @@ tile_basis = {
     "ground": load_image("ground.png"),
     "clay": load_image("clay.png")
 }
+
 tiles_resourse = {
     '1': {
         "type": "empty",
@@ -64,7 +65,7 @@ tiles_resourse = {
         "quantity": 1,
         "strength": 1.2,
         "rarity": 100,
-        "price": 30
+        "price": 50
     },
     '3': {
         "type": "silver",
@@ -224,10 +225,33 @@ class Border(pygame.sprite.Sprite):
 class Player(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y):
         super().__init__(player_group, all_sprites)
-        self.right_image = load_image('subright.png', -1)
-        self.left_image = load_image('subleft.png', -1)
-        self.image = self.right_image
-        self.rect = self.image.get_rect().move(tile_width * pos_x + 15, tile_height * pos_y + 5)
+        right_image = load_image('subright.png', -1)
+        left_image = load_image('subleft.png', -1)
+
+        self.rect = right_image.get_rect().move(tile_width * pos_x + 15, tile_height * pos_y + 5)
+        self.blade = load_image("blade.png", -1)
+
+        self.images = {
+            "right": [],
+            "left": []
+        }
+        for side in ("right", "left"):
+            for i in range(4):
+                if side == "left":
+                    image = pygame.Surface((46, 32), pygame.SRCALPHA, 32)
+                    image.blit(pygame.transform.rotate(self.blade, -90 * i), (0, 0))
+                    image.blit(left_image, (6, 0))
+                else:
+                    image = pygame.Surface((46, 32), pygame.SRCALPHA, 32)
+                    image.blit(pygame.transform.rotate(self.blade, -90 * i), (8, 0))
+                    image.blit(right_image, (0, 0))       
+                
+                self.images[side].append(image)
+
+        self.image_counter = 0
+        self.image = 0
+        self.image_side = "right"
+
         self.diging = 0
         self.diging_side = None
         self.diging_tile = None
@@ -246,6 +270,18 @@ class Player(pygame.sprite.Sprite):
         colliding = pygame.sprite.spritecollide(self, border_group, False)
         return list(map(lambda x: (x, x.side), colliding))
 
+    def draw(self, screen):
+        self.image_counter += 1
+        if self.diging and (self.image_counter) % 4 == 0:
+            self.image = (self.image + 1) % 4
+            
+        if self.image_side == "right":
+            x = self.rect.x - 2
+        else:
+            x = self.rect.x - 4
+        screen.blit(self.images[self.image_side][self.image], (x, self.rect.y))
+
+
     def action(self, keys):
         if self.oxygen <= 0:
             terminate()
@@ -259,10 +295,10 @@ class Player(pygame.sprite.Sprite):
     def move(self, keys):
         on_ground = False
         if keys[pygame.K_LEFT]:
-            self.image = self.left_image
+            self.image_side = "left"
             self.vel_x = -self.velocity
         if keys[pygame.K_RIGHT]:
-            self.image = self.right_image
+            self.image_side = "right"
             self.vel_x = self.velocity
         if keys[pygame.K_DOWN]:
             self.vel_y += self.velocity
@@ -429,7 +465,7 @@ def generate_level(level):
     return new_player, level_blocks_width, level_blocks_height
 
 
-#start_screen()
+start_screen()
 
 lvl = generate_level_txt(50, 100)
 player, level_blocks_width, level_blocks_height = generate_level(lvl)
@@ -471,7 +507,7 @@ while running:
     
     background_group.draw(screen)
     tiles_group.draw(screen)
-    player_group.draw(screen)
+    player.draw(screen)
     barge_group.draw(screen)
     border_group.draw(screen)
     interface.draw()
