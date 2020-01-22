@@ -1,7 +1,7 @@
 import pygame
 import sys
 import os
-
+import time
 
 FPS = 50
 WIDTH, HEIGHT = 256, 400
@@ -55,35 +55,35 @@ tiles_resourse = {
         "type": "empty",
         "quantity": 0,
         "strength": 1,
-        "rarity": 1,
+        "rarity": 990,
         "price": 0
     },
     '2': {
         "type": "quartz",
         "quantity": 1,
         "strength": 1.2,
-        "rarity": 0.5,
+        "rarity": 100,
         "price": 50
     },
     '3': {
         "type": "silver",
         "quantity": 1,
         "strength": 1.5,
-        "rarity": 0.25,
+        "rarity": 50,
         "price": 200
     },
     '4': {
         "type": "gold",
         "quantity": 1,
         "strength": 1.7,
-        "rarity": 0.1,
+        "rarity": 10,
         "price": 400
     },
     '5': {
         "type": "gem",
         "quantity": 1,
         "strength": 1.5,
-        "rarity": 0.05,
+        "rarity": 1,
         "price": 700
     },
 }
@@ -144,16 +144,21 @@ class Player(pygame.sprite.Sprite):
         self.velocity = 2
         self.diging_velocity = 2
         self.gravity = GRAVITY
+        self.oxygen = 10000
     
     def _collide_borders(self):
         colliding = pygame.sprite.spritecollide(self, border_group, False)
         return list(map(lambda x: (x, x.side), colliding))
 
     def action(self, keys):
+        if self.oxygen <= 0:
+            terminate()
         if self.diging:
             self.dig()
+            self.oxygen -= 2
         else:
             self.move(keys)
+            self.oxygen -= 1
     
     def move(self, keys):
         on_ground = False
@@ -186,12 +191,12 @@ class Player(pygame.sprite.Sprite):
                 col = None
 
             if col is not None:
-                if self.rect.bottom <= col.rect.top <= self.rect.bottom:
-                    if keys[pygame.K_DOWN]:
-                        self.dig(col, "bottom")
-                        return
-                    else:
-                        on_ground = True   
+                if keys[pygame.K_DOWN]:
+                    self.rect.y -= self.vel_y
+                    self.dig(col, "bottom")
+                    return
+                else:
+                    on_ground = True   
 
         self.rect.x += self.vel_x
         colliding = pygame.sprite.spritecollide(self, tiles_group, False)
@@ -303,6 +308,22 @@ all_sprites = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
 player_group = pygame.sprite.Group()
 
+def random_resourse():
+    from random import randrange
+    for key, values in list(tiles_resourse.items())[::-1]:
+        rand = randrange(1000)
+        if rand < values["rarity"]:
+            return key
+    return "-"
+
+def generate_level_txt(width, height):
+    res = [["-"] * width for _ in range(5)]
+    res = [ *res, *[[random_resourse() for i in range(width)] for _ in range(height)] ]
+    res[0][width // 2] = "@"
+    return res
+            
+
+
 def generate_level(level):
     new_player, x, y = None, None, None
     level_blocks_height = len(level)
@@ -310,7 +331,10 @@ def generate_level(level):
     for y in range(len(level)):
         for x in range(len(level[y])):
             if level[y][x] in tiles_resourse:
-                Tile(x, y, 'ground', level[y][x])
+                if y < 50:
+                    Tile(x, y, 'ground', level[y][x])
+                else:
+                    Tile(x, y, 'clay', level[y][x])
             elif level[y][x] == '@':
                 new_player = Player(x, y)
     return new_player, x, y, level_blocks_width, level_blocks_height
@@ -318,7 +342,8 @@ def generate_level(level):
 
 start_screen()
 
-player, player_x, player_y, level_blocks_width, level_blocks_height = generate_level(load_level("map.txt"))
+lvl = generate_level_txt(50, 100)
+player, player_x, player_y, level_blocks_width, level_blocks_height = generate_level(lvl)
 
 background_group = pygame.sprite.Group()
 Background(level_blocks_width * tile_width, level_blocks_height * tile_height)
