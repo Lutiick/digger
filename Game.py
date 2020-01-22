@@ -4,14 +4,17 @@ import os
 import time
 
 FPS = 50
-WIDTH, HEIGHT = 256, 400
-
+WIDTH, HEIGHT = 500, 400
 
 pygame.init()
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
 GRAVITY = 2
 FONT = pygame.font.Font(None, 24)
+pygame.mixer.init()
+music = pygame.mixer.music.load(os.path.join('data', "music.mp3"))
+pygame.mixer.music.play(loops=-1)
+
 
 def terminate():
     pygame.quit()
@@ -28,9 +31,6 @@ def load_image(name, colorkey=None):
     else:
         image = image.convert_alpha()
     return image
-
-
-
 
 
 def load_level(filename):
@@ -92,6 +92,7 @@ tiles_resourse = {
 for resourse in tiles_resourse.values():
     resourse["image"] = load_image(f"{resourse['type']}.png", -1)
 
+
 class Interface:
     def __init__(self, screen, coins=0, oxygen=100):
         self.screen = screen
@@ -119,7 +120,70 @@ class Interface:
         coins_sur.blit(txt, (26, 0))
         self.screen.blit(coins_sur, (0, 20))
 
+
+class Barge(pygame.sprite.Sprite):
+    def __init__(self, pos_x, pos_y, screen):
+        super().__init__(barge_group, all_sprites)
+        self.image = load_image("tanker.png", -1)
+        self.rect = self.image.get_rect().move(pos_x, pos_y)
+        self.screen = screen
+        self.choosed = 1
+        self.oxygen_lvl = 1
+        self.drill_lvl = 1
+        self.standart_price = 1500
+
+    def draw_shop(self, surface):
+        surface.fill(pygame.Color("blue"))
+        if self.choosed == 1:
+            upgrade_oxygen_btn = FONT.render(f"Upgrade oxygen tank: {str(self.standart_price * ((1 + self.oxygen_lvl) / 2))}", 0, (0, 255, 0))
+            upgrade_drill_btn = FONT.render(f"Upgrade drill: {str(self.standart_price * ((1 + self.drill_lvl) / 2))}", 0, (255, 255, 255))
+        else:
+            upgrade_oxygen_btn = FONT.render(f"Upgrade oxygen tank: {str(self.standart_price * ((1 + self.oxygen_lvl) / 2))}", 0, (255, 255, 255))
+            upgrade_drill_btn = FONT.render(f"Upgrade drill: {str(self.standart_price * ((1 + self.drill_lvl) / 2))}", 0, (0, 255, 0))
         
+        surface.blit(upgrade_oxygen_btn, (5, 70))
+        surface.blit(upgrade_drill_btn, (5, 90))
+        interface.draw()
+
+    def buy(self):
+        if self.choosed == 1:
+            if player.coins >= self.standart_price * ((1 + self.oxygen_lvl) // 2):
+                player.coins -= self.standart_price * ((1 + self.oxygen_lvl) // 2)
+                player.max_oxygen += 2000
+                self.oxygen_lvl += 1
+        else:
+            if player.coins >= self.standart_price * ((1 + self.drill_lvl) // 2):
+                player.coins -= self.standart_price * ((1 + self.drill_lvl) // 2)
+                player.diging_velocity += 1
+                self.drill_lvl += 1
+        interface.set_coins(player.coins)
+
+    def run_shop(self):
+        surface = pygame.Surface((WIDTH, HEIGHT))
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    terminate()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        return
+                    elif event.key == pygame.K_KP_ENTER:
+                        self.buy()
+                    elif event.key == pygame.K_UP or event.key == pygame.K_DOWN:
+                        if self.choosed == 1:
+                            self.choosed = 2
+                        else:
+                            self.choosed = 1
+            self.draw_shop(surface)
+            self.screen.blit(surface, (0, 0))
+            interface.draw()
+            pygame.display.flip()
+            clock.tick(FPS)
+    
+    def move_barge(self, pos_x):
+        self.rect.x = pos_x
+        
+
 class Tile(pygame.sprite.Sprite):
     def __init__(self, pos_x, pos_y, basis, resourse):
         super().__init__(tiles_group, all_sprites)
@@ -255,7 +319,11 @@ class Player(pygame.sprite.Sprite):
                 self.rect.right = coll.rect.left
             elif side == "left":
                 self.rect.left = coll.rect.right
-
+        
+        barge = pygame.sprite.spritecollide(self, barge_group, False)
+        for b in barge:
+            self.oxygen = self.max_oxygen
+            b.run_shop()
         self.vel_y = 0
         self.vel_x = 0
         
@@ -289,24 +357,9 @@ class Player(pygame.sprite.Sprite):
         self.diging += self.diging_velocity / self.diging_tile.strength
         
 
-
-
-
 def start_screen():
-    intro_text = ["Нажмите любую кнопку для старта"]
-
-    #fon = pygame.transform.scale(load_image('gamestart.png'), (WIDTH, HEIGHT))
-    #screen.blit(fon, (0, 0))
-    font = pygame.font.Font(None, 30)
-    text_coord = 50
-    for line in intro_text:
-        string_rendered = font.render(line, 1, pygame.Color('black'))
-        intro_rect = string_rendered.get_rect()
-        text_coord += 10
-        intro_rect.top = text_coord
-        intro_rect.x = 10
-        text_coord += intro_rect.height
-        screen.blit(string_rendered, intro_rect)
+    fon = pygame.transform.scale(load_image('gamestart.png'), (WIDTH, HEIGHT))
+    screen.blit(fon, (0, 0))
 
     while True:
         for event in pygame.event.get():
@@ -320,9 +373,10 @@ def start_screen():
 
 class Camera:
     # зададим начальный сдвиг камеры
-    def __init__(self):
+    def __init__(self, start_depth=0):
         self.dx = 0
         self.dy = 0
+        self.depth = start_depth
         
     # сдвинуть объект obj на смещение камеры
     def apply(self, obj):
@@ -333,6 +387,7 @@ class Camera:
     def update(self, target):
         self.dx = -(target.rect.x + target.rect.w // 2 - WIDTH // 2)
         self.dy = -(target.rect.y + target.rect.h // 2 - HEIGHT // 2)
+        self.depth -= self.dy
 
 
 player = None
@@ -341,6 +396,7 @@ player = None
 all_sprites = pygame.sprite.Group()
 tiles_group = pygame.sprite.Group()
 player_group = pygame.sprite.Group()
+
 
 def random_resourse():
     from random import randrange
@@ -357,7 +413,6 @@ def generate_level_txt(width, height):
     return res
             
 
-
 def generate_level(level):
     new_player, x, y = None, None, None
     level_blocks_height = len(level)
@@ -371,13 +426,16 @@ def generate_level(level):
                     Tile(x, y, 'clay', level[y][x])
             elif level[y][x] == '@':
                 new_player = Player(x, y)
-    return new_player, x, y, level_blocks_width, level_blocks_height
+    return new_player, level_blocks_width, level_blocks_height
 
 
-start_screen()
+#start_screen()
 
 lvl = generate_level_txt(50, 100)
-player, player_x, player_y, level_blocks_width, level_blocks_height = generate_level(lvl)
+player, level_blocks_width, level_blocks_height = generate_level(lvl)
+
+barge_group = pygame.sprite.Group()
+barge = Barge(level_blocks_width * tile_width // 2, -tile_height, screen)
 
 background_group = pygame.sprite.Group()
 Background(level_blocks_width * tile_width, level_blocks_height * tile_height)
@@ -386,7 +444,7 @@ border_group = pygame.sprite.Group()
 for side in ("right", "left", "bottom"):
     Border(level_blocks_width * tile_width, level_blocks_height * tile_height, side)
 interface = Interface(screen)
-camera = Camera()
+camera = Camera(start_depth=(HEIGHT- player.rect.height) // 2)
 running = True
 
 while running:
@@ -399,6 +457,9 @@ while running:
     interface.set_oxygen(player.oxygen / player.max_oxygen)
     interface.set_coins(player.coins)
     camera.update(player)
+    if camera.depth > HEIGHT / 2:
+        barge.move_barge(player.rect.x)
+
     for sprite in all_sprites:
         camera.apply(sprite)
     
@@ -411,6 +472,7 @@ while running:
     background_group.draw(screen)
     tiles_group.draw(screen)
     player_group.draw(screen)
+    barge_group.draw(screen)
     border_group.draw(screen)
     interface.draw()
     
